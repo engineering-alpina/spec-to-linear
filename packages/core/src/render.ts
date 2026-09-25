@@ -7,6 +7,26 @@ import type { Epic, Plan, Ticket } from "./schema.ts"
  */
 export const marker = (specId: string, key: string) => `stl:${specId}/${key}`
 
+/**
+ * Linear rewrites markdown when it stores a description (list markers, escaping),
+ * so comparing text would report a change on every run. Instead the footer carries
+ * a short hash of the body we sent; a re-run compares hashes.
+ */
+export const revision = (text: string): string => {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16).padStart(8, "0")
+}
+
+export const readRevision = (description: string): string | undefined =>
+  description.match(/\brev ([0-9a-f]{8})\b/)?.[1]
+
+const footer = (specId: string, key: string, body: string) =>
+  `\n\n---\nGenerated from spec \`${specId}\` · ${marker(specId, key)} · rev ${revision(body)}`
+
 export const ticketDescription = (plan: Plan, ticket: Ticket): string => {
   const ac = ticket.acceptanceCriteria.map((a) => `- [ ] ${a}`).join("\n")
   const pkgs = ticket.packages.map((p) => `\`${p}\``).join(", ")
@@ -14,23 +34,19 @@ export const ticketDescription = (plan: Plan, ticket: Ticket): string => {
   const edges = ticket.newDependencies.length
     ? `\n\n**New imports:** ${ticket.newDependencies.map((e) => `\`${e.from}\` → \`${e.to}\``).join(", ")}`
     : ""
-  return `${ticket.description}
+  const body = `${ticket.description}
 
 **Packages:** ${pkgs}${edges}${deps}
 
 ### Acceptance criteria
-${ac}
-
----
-Generated from spec \`${plan.spec.id}\` · ${marker(plan.spec.id, ticket.key)}`
+${ac}`
+  return body + footer(plan.spec.id, ticket.key, body)
 }
 
-export const epicDescription = (plan: Plan, epic: Epic): string => `${epic.summary}
-
-Tickets: ${epic.tickets.map((t) => t.key).join(", ")}
-
----
-Generated from spec \`${plan.spec.id}\` · ${marker(plan.spec.id, epic.key)}`
+export const epicDescription = (plan: Plan, epic: Epic): string => {
+  const body = `${epic.summary}\n\nTickets: ${epic.tickets.map((t) => t.key).join(", ")}`
+  return body + footer(plan.spec.id, epic.key, body)
+}
 
 /** Human-readable plan for PR descriptions, chat previews and the README. */
 export const planToMarkdown = (plan: Plan): string => {
