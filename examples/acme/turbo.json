@@ -1,0 +1,63 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "boundaries": {
+    "tags": {
+      "layer:feature": {
+        "dependencies": {
+          "deny": [
+            "layer:app"
+          ]
+        }
+      },
+      "layer:domain": {
+        "dependencies": {
+          "deny": [
+            "layer:app",
+            "layer:feature",
+            "layer:infra",
+            "layer:ui"
+          ]
+        }
+      },
+      "layer:infra": {
+        "dependencies": {
+          "deny": [
+            "layer:app",
+            "layer:feature",
+            "layer:ui"
+          ]
+        }
+      },
+      "layer:ui": {
+        "dependencies": {
+          "deny": [
+            "layer:app",
+            "layer:feature",
+            "layer:domain",
+            "layer:infra"
+          ]
+        }
+      },
+      "layer:shared": {
+        "dependencies": {
+          "deny": [
+            "layer:app",
+            "layer:feature",
+            "layer:domain",
+            "layer:infra",
+            "layer:ui"
+          ]
+        }
+      }
+    }
+  },
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "typecheck": {},
+    "test": {}
+  }
+}

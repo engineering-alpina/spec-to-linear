@@ -1,0 +1,15 @@
+{
+  "name": "@stl/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "stl": "./src/main.ts" },
+  "scripts": { "typecheck": "tsc -p ." },
+  "dependencies": {
+    "@stl/context": "workspace:*",
+    "@stl/core": "workspace:*",
+    "@stl/linear": "workspace:*",
+    "@stl/planner": "workspace:*",
+    "effect": "^3.22.2"
+  }
+}

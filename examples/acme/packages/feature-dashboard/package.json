@@ -1,0 +1,11 @@
+{
+  "name": "@acme/feature-dashboard",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@acme/members-domain": "workspace:*",
+    "@acme/tenant-db": "workspace:*",
+    "@acme/ui": "workspace:*",
+    "@acme/effect-kit": "workspace:*"
+  }
+}

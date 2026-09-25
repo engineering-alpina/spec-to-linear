@@ -1,0 +1,354 @@
+{
+  "spec": {
+    "id": "tenant-audit-log",
+    "title": "Tenant audit log"
+  },
+  "project": {
+    "name": "Tenant audit log",
+    "description": "Record role and billing changes per tenant, expose them in the portal and the public API, and log staff access from the admin app. Spec: specs/tenant-audit-log.md"
+  },
+  "epics": [
+    {
+      "key": "AUD-E1",
+      "title": "Audit foundations",
+      "summary": "Domain model, table and writer that every capture point uses.",
+      "labels": [
+        "audit-log"
+      ],
+      "tickets": [
+        {
+          "key": "AUD-1",
+          "title": "Scaffold @acme/audit-domain with event schema and redaction policy",
+          "type": "feature",
+          "description": "Create the pure domain package for audit events: an Effect Schema `AuditEvent`, the action catalogue (`member.role_changed`, `billing.plan_changed`, `staff.tenant_accessed`) and a `redact` policy that drops payment method fields. No IO; tagged `layer:domain`.",
+          "packages": [
+            "@acme/audit-domain"
+          ],
+          "createsPackages": [
+            {
+              "name": "@acme/audit-domain",
+              "path": "packages/audit-domain",
+              "tags": [
+                "layer:domain"
+              ],
+              "description": "Pure audit event model, action catalogue and redaction policy."
+            }
+          ],
+          "newDependencies": [
+            {
+              "from": "@acme/audit-domain",
+              "to": "@acme/effect-kit"
+            }
+          ],
+          "acceptanceCriteria": [
+            "`packages/audit-domain` exists with package.json, turbo.json tag `layer:domain` and a README, and `turbo boundaries` passes",
+            "`AuditEvent` decodes a valid event and rejects one with an unknown action (Vitest)",
+            "`redact` removes `payment_method` and `card` keys from `before` and `after` at any depth (Vitest)"
+          ],
+          "estimate": 3,
+          "dependsOn": [],
+          "labels": []
+        },
+        {
+          "key": "AUD-2",
+          "title": "Add audit_events table and migration",
+          "type": "migration",
+          "description": "Additive migration in `@acme/db-schema` creating `audit_events` with the columns and indexes from the spec. Must be idempotent because the migrate runner applies it to every tenant database.",
+          "packages": [
+            "@acme/db-schema"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "Running the migration twice against a fresh tenant database leaves exactly one `audit_events` table and both indexes",
+            "`EXPLAIN` of the list query `ORDER BY occurred_at DESC, id DESC LIMIT 100` uses the `(occurred_at desc, id)` index",
+            "The migrate runner applies it to all tenant databases in staging with zero failures"
+          ],
+          "estimate": 3,
+          "dependsOn": [],
+          "labels": []
+        },
+        {
+          "key": "AUD-3",
+          "title": "AuditWriter service in tenant-db behind the audit-log flag",
+          "type": "feature",
+          "description": "Add an `AuditWriter` Effect service (Context.Tag + live Layer + test Layer) that redacts and inserts an `AuditEvent` into the current tenant's database. Writes are skipped when the `audit-log` flag is off for the tenant. Failures are reported to Sentry and never fail the calling use-case.",
+          "packages": [
+            "@acme/tenant-db"
+          ],
+          "createsPackages": [],
+          "newDependencies": [
+            {
+              "from": "@acme/tenant-db",
+              "to": "@acme/audit-domain"
+            }
+          ],
+          "acceptanceCriteria": [
+            "`AuditWriter.record(event)` inserts one row into the current tenant's `audit_events` with redacted before/after (integration test against a Neon branch)",
+            "With the `audit-log` flag off for a tenant, `record` performs no insert (Vitest with the test Layer)",
+            "A failing insert is captured by the observability Layer as `AuditWriteError` and the caller's Effect still succeeds"
+          ],
+          "estimate": 5,
+          "dependsOn": [
+            "AUD-1",
+            "AUD-2"
+          ],
+          "labels": []
+        }
+      ]
+    },
+    {
+      "key": "AUD-E2",
+      "title": "Capture changes",
+      "summary": "Emit audit events from the existing member and billing use-cases.",
+      "labels": [
+        "audit-log"
+      ],
+      "tickets": [
+        {
+          "key": "AUD-4",
+          "title": "Emit member.role_changed from feature-members",
+          "type": "feature",
+          "description": "Call `AuditWriter.record` from the change-role use-case with actor, target member, and before/after roles. Covers portal and API callers because both go through feature-members.",
+          "packages": [
+            "@acme/feature-members"
+          ],
+          "createsPackages": [],
+          "newDependencies": [
+            {
+              "from": "@acme/feature-members",
+              "to": "@acme/audit-domain"
+            }
+          ],
+          "acceptanceCriteria": [
+            "Changing a member's role through the use-case writes one `member.role_changed` event with the old and new role (Vitest with test Layers)",
+            "A role change that fails validation writes no event",
+            "The actor type is `api_key` when the change comes from `@acme/api` and `member` when it comes from the portal"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "AUD-3"
+          ],
+          "labels": []
+        },
+        {
+          "key": "AUD-5",
+          "title": "Emit billing.plan_changed from feature-billing",
+          "type": "feature",
+          "description": "Record plan changes, including the Stripe-webhook path. Payment method data must be redacted before the write.",
+          "packages": [
+            "@acme/feature-billing"
+          ],
+          "createsPackages": [],
+          "newDependencies": [
+            {
+              "from": "@acme/feature-billing",
+              "to": "@acme/audit-domain"
+            }
+          ],
+          "acceptanceCriteria": [
+            "Upgrading a plan through the use-case writes one `billing.plan_changed` event with old and new plan ids",
+            "A plan change arriving via the Stripe webhook writes an event with actor type `system`",
+            "No stored event contains a `payment_method` key (Vitest asserting on the recorded payload)"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "AUD-3"
+          ],
+          "labels": []
+        }
+      ]
+    },
+    {
+      "key": "AUD-E3",
+      "title": "Read surfaces",
+      "summary": "List, filter and export the log for tenant admins and tenant systems.",
+      "labels": [
+        "audit-log"
+      ],
+      "tickets": [
+        {
+          "key": "AUD-6",
+          "title": "Scaffold @acme/feature-audit with list use-case and cursor pagination",
+          "type": "feature",
+          "description": "New feature package exposing `listAuditEvents({ cursor, limit, actorId, action, from, to })` for the current tenant. Cursor is opaque base64 of `(occurred_at, id)`.",
+          "packages": [
+            "@acme/feature-audit"
+          ],
+          "createsPackages": [
+            {
+              "name": "@acme/feature-audit",
+              "path": "packages/feature-audit",
+              "tags": [
+                "layer:feature"
+              ],
+              "description": "Audit log list and export use-cases for the current tenant."
+            }
+          ],
+          "newDependencies": [
+            {
+              "from": "@acme/feature-audit",
+              "to": "@acme/audit-domain"
+            },
+            {
+              "from": "@acme/feature-audit",
+              "to": "@acme/tenant-db"
+            }
+          ],
+          "acceptanceCriteria": [
+            "`packages/feature-audit` exists with tag `layer:feature` and `turbo boundaries` passes",
+            "Listing 250 seeded events with limit 100 returns 3 pages with no duplicates or gaps (integration test)",
+            "Filters by actorId, action and date range each return only matching rows",
+            "limit above 500 fails with `InvalidPageSize`"
+          ],
+          "estimate": 5,
+          "dependsOn": [
+            "AUD-3"
+          ],
+          "labels": []
+        },
+        {
+          "key": "AUD-7",
+          "title": "Portal audit log page with filters",
+          "type": "feature",
+          "description": "Server-component page at `/settings/audit-log` in apps/portal, visible to tenant admins only, with actor, action and date filters and 'load more' pagination.",
+          "packages": [
+            "@acme/portal"
+          ],
+          "createsPackages": [],
+          "newDependencies": [
+            {
+              "from": "@acme/portal",
+              "to": "@acme/feature-audit"
+            }
+          ],
+          "acceptanceCriteria": [
+            "A tenant admin sees events newest first with actor, action, target and timestamp columns",
+            "A non-admin member gets a 404 for `/settings/audit-log`",
+            "Applying a filter updates the URL query string and a reload shows the same results (Playwright)"
+          ],
+          "estimate": 5,
+          "dependsOn": [
+            "AUD-6"
+          ],
+          "labels": []
+        },
+        {
+          "key": "AUD-8",
+          "title": "GET /v1/audit-events in the public API",
+          "type": "feature",
+          "description": "Route handler in apps/api returning `{ data, next_cursor }`. Default page size 100, max 500. Documented in the OpenAPI spec.",
+          "packages": [
+            "@acme/api"
+          ],
+          "createsPackages": [],
+          "newDependencies": [
+            {
+              "from": "@acme/api",
+              "to": "@acme/feature-audit"
+            }
+          ],
+          "acceptanceCriteria": [
+            "`GET /v1/audit-events` with a valid API key returns 200 and at most 100 events by default",
+            "`?limit=501` returns 400 with error code `invalid_page_size`",
+            "Following `next_cursor` until null returns every event exactly once (integration test)",
+            "The endpoint appears in the generated OpenAPI document"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "AUD-6"
+          ],
+          "labels": []
+        }
+      ]
+    },
+    {
+      "key": "AUD-E4",
+      "title": "Staff access",
+      "summary": "Log support access to tenant data and let staff read a tenant's log from admin, through feature-tenants only.",
+      "labels": [
+        "audit-log"
+      ],
+      "tickets": [
+        {
+          "key": "AUD-9",
+          "title": "Record staff.tenant_accessed in feature-tenants",
+          "type": "feature",
+          "description": "Every feature-tenants use-case that opens a tenant database records a `staff.tenant_accessed` event in that tenant's log with the staff id and stated reason.",
+          "packages": [
+            "@acme/feature-tenants"
+          ],
+          "createsPackages": [],
+          "newDependencies": [
+            {
+              "from": "@acme/feature-tenants",
+              "to": "@acme/audit-domain"
+            }
+          ],
+          "acceptanceCriteria": [
+            "Opening a tenant database through feature-tenants writes one `staff.tenant_accessed` event with actor type `staff`",
+            "A call without a reason fails with `MissingAccessReason` and writes nothing"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "AUD-3"
+          ],
+          "labels": []
+        },
+        {
+          "key": "AUD-10",
+          "title": "Tenant audit log view in admin via feature-tenants",
+          "type": "feature",
+          "description": "Admin page showing a tenant's audit log. Admin may not import feature-audit (rule `admin-no-tenant-scoped-features`), so feature-tenants wraps `listAuditEvents` and logs the access.",
+          "packages": [
+            "@acme/feature-tenants",
+            "@acme/admin"
+          ],
+          "createsPackages": [],
+          "newDependencies": [
+            {
+              "from": "@acme/feature-tenants",
+              "to": "@acme/feature-audit"
+            }
+          ],
+          "acceptanceCriteria": [
+            "Support staff can open a tenant's audit log in admin after entering an access reason",
+            "Viewing the log itself creates a `staff.tenant_accessed` event in that tenant",
+            "`depcruise` passes: `@acme/admin` has no import of `@acme/feature-audit`"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "AUD-6",
+            "AUD-9"
+          ],
+          "labels": []
+        },
+        {
+          "key": "AUD-11",
+          "title": "End-to-end audit test and staged rollout",
+          "type": "test",
+          "description": "Playwright test covering a role change in the portal showing up in the portal log and the API. Then enable the flag for internal tenants, watch Sentry for a week, and enable for the two enterprise prospects.",
+          "packages": [
+            "@acme/portal",
+            "@acme/api"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "Playwright: change a role in the portal, the event appears in the portal log and in `GET /v1/audit-events` within 5 seconds",
+            "The flag is on for all internal tenants and Sentry shows zero `AuditWriteError` over 7 days",
+            "The flag is on for the two enterprise prospect tenants"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "AUD-4",
+            "AUD-5",
+            "AUD-7",
+            "AUD-8"
+          ],
+          "labels": []
+        }
+      ]
+    }
+  ]
+}

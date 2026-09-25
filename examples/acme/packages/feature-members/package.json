@@ -1,0 +1,10 @@
+{
+  "name": "@acme/feature-members",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@acme/members-domain": "workspace:*",
+    "@acme/tenant-db": "workspace:*",
+    "@acme/effect-kit": "workspace:*"
+  }
+}

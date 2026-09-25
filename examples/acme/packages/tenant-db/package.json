@@ -1,0 +1,10 @@
+{
+  "name": "@acme/tenant-db",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@acme/db-schema": "workspace:*",
+    "@acme/effect-kit": "workspace:*",
+    "@acme/observability": "workspace:*"
+  }
+}

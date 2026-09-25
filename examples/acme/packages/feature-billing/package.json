@@ -1,0 +1,11 @@
+{
+  "name": "@acme/feature-billing",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@acme/billing-domain": "workspace:*",
+    "@acme/tenant-db": "workspace:*",
+    "@acme/ui": "workspace:*",
+    "@acme/effect-kit": "workspace:*"
+  }
+}

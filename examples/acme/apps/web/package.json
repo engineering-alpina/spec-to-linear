@@ -1,0 +1,11 @@
+{
+  "name": "@acme/web",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@acme/feature-dashboard": "workspace:*",
+    "@acme/feature-billing": "workspace:*",
+    "@acme/ui": "workspace:*",
+    "@acme/effect-kit": "workspace:*"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@stl/planner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p ." },
+  "dependencies": { "@stl/core": "workspace:*", "@anthropic-ai/sdk": "^0.128.0", "effect": "^3.22.2" }
+}

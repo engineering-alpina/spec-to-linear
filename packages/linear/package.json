@@ -1,0 +1,9 @@
+{
+  "name": "@stl/linear",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p ." },
+  "dependencies": { "@stl/core": "workspace:*", "effect": "^3.22.2" }
+}

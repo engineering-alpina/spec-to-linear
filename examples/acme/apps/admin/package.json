@@ -1,0 +1,10 @@
+{
+  "name": "@acme/admin",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@acme/feature-tenants": "workspace:*",
+    "@acme/ui": "workspace:*",
+    "@acme/effect-kit": "workspace:*"
+  }
+}
