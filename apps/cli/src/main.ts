@@ -19,7 +19,7 @@ import {
   syncPlan,
 } from "@stl/linear";
 import { AnthropicModel, decomposeSpec, reviewSpec } from "@stl/planner";
-import { Console, Effect } from "effect";
+import { Cause, Console, Effect } from "effect";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
@@ -197,8 +197,13 @@ if (!run) {
   process.exit(cmd ? 1 : 0);
 }
 
-Effect.runPromise(Effect.suspend(run)).catch((e: unknown) => {
-  const err = e as { message?: string; reason?: string; _tag?: string };
-  console.error(`error: ${err.reason ?? err.message ?? String(e)}`);
+Effect.runPromiseExit(Effect.suspend(run)).then((exit) => {
+  if (exit._tag === "Success") return;
+  const failure = Cause.failureOption(exit.cause);
+  const err = (failure._tag === "Some" ? failure.value : Cause.squash(exit.cause)) as {
+    message?: string;
+    reason?: string;
+  };
+  console.error(`error: ${err.reason ?? err.message ?? Cause.pretty(exit.cause)}`);
   process.exit(1);
 });

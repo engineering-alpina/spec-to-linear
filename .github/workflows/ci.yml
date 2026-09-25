@@ -1,0 +1,17 @@
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      # The example plan must stay valid against the example monorepo.
+      - run: pnpm stl validate examples/acme/plans/tenant-audit-log.plan.json --root examples/acme
+      - run: pnpm stl sync examples/acme/plans/tenant-audit-log.plan.json --root examples/acme --offline

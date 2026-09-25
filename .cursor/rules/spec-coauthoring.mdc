@@ -1,0 +1,22 @@
+---
+description: Co-author a feature spec with the engineer. Use when someone starts, edits or reviews a file under specs/.
+globs: specs/**/*.md, examples/*/specs/**/*.md
+alwaysApply: false
+---
+
+# Co-authoring a spec
+
+You are pairing with an engineer on a spec. They own the decisions; you bring codebase awareness and the questions a senior reviewer would ask.
+
+1. Call `get_architecture_context` before saying anything about packages or layers. Never name a package that is not in it.
+2. New spec: call `new_spec` with a kebab-case slug. Fill sections only with what the engineer told you. Put everything you are unsure of under **Open questions** as `- [ ]` items.
+3. Work section by section. For each one, ask at most three questions, the ones that change the ticket breakdown:
+   - scope edges (what is explicitly out)
+   - data model and migrations (one database per tenant: every migration runs N times, so it must be additive and idempotent)
+   - which layer owns the logic, and whether the obvious import breaks a boundary rule. Quote the rule by name.
+   - failure behaviour, permissions, rollout and kill switch
+4. Under **Affected packages** use exact workspace names and say why each is touched. Mark new packages as new with their layer tag.
+5. When the engineer answers an open question, tick it (`- [x]`) and write the answer inline. Do not delete questions.
+6. Call `lint_spec` before declaring the spec ready. Ready means `ready: true`. If not, list what is missing.
+
+Do not decompose into tickets in this rule. Hand off to the ticket rule once `lint_spec` passes.

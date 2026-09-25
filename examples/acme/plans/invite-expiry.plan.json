@@ -1,0 +1,309 @@
+{
+  "spec": {
+    "id": "invite-expiry",
+    "title": "Member invite expiry"
+  },
+  "project": {
+    "name": "Member invite expiry",
+    "description": "Invites expire after a per-tenant TTL, admins manage pending invites in the portal, old invites are backfilled. Spec: specs/invite-expiry.md"
+  },
+  "epics": [
+    {
+      "key": "INV-E1",
+      "title": "Expiry model and schema",
+      "summary": "Policy and columns everything else builds on.",
+      "labels": [
+        "invite-expiry"
+      ],
+      "tickets": [
+        {
+          "key": "INV-1",
+          "title": "Invite expiry policy in members-domain",
+          "type": "feature",
+          "description": "Pure functions: `expiresAt(createdAt, ttlDays)`, `isExpired(invite, now)`, and a `InviteTtlDays` schema bounded 1..30 with default 7.",
+          "packages": [
+            "@acme/members-domain"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "`expiresAt` adds exactly ttlDays days in UTC across a DST change (Vitest)",
+            "`InviteTtlDays` rejects 0 and 31 and accepts 1 and 30",
+            "`isExpired` is false one millisecond before expiresAt and true at expiresAt"
+          ],
+          "estimate": 2,
+          "dependsOn": [],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-2",
+          "title": "Add expires_at and invite_ttl_days columns",
+          "type": "migration",
+          "description": "Additive, idempotent migration: nullable `member_invites.expires_at`, `tenant_settings.invite_ttl_days int not null default 7`.",
+          "packages": [
+            "@acme/db-schema"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "Migration applied twice to a fresh tenant database produces both columns once",
+            "Existing invite rows keep expires_at null after the migration",
+            "Migrate runner applies it to all staging tenants with zero failures"
+          ],
+          "estimate": 2,
+          "dependsOn": [],
+          "labels": [
+            "invite-expiry"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "INV-E2",
+      "title": "Write and enforce expiry",
+      "summary": "New invites carry an expiry, old ones are backfilled, accept enforces it.",
+      "labels": [
+        "invite-expiry"
+      ],
+      "tickets": [
+        {
+          "key": "INV-3",
+          "title": "Set expires_at on invite create and resend",
+          "type": "feature",
+          "description": "Create and resend use-cases compute expires_at from the tenant's invite_ttl_days.",
+          "packages": [
+            "@acme/feature-members"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "Creating an invite in a tenant with TTL 3 stores expires_at = created_at + 3 days",
+            "Resending an invite resets expires_at from the resend time"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "INV-1",
+            "INV-2"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-4",
+          "title": "Backfill expiry for existing invites",
+          "type": "feature",
+          "description": "One-off job per tenant: set expires_at = created_at + TTL for rows where it is null, and mark rows already past it as `expired`.",
+          "packages": [
+            "@acme/feature-members"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "After the backfill no invite row has a null expires_at",
+            "Invites older than the TTL have status `expired`; younger ones stay `pending`",
+            "Running the job twice changes nothing the second time"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "INV-3"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-5",
+          "title": "Enforce expiry on accept behind invite-expiry flag",
+          "type": "feature",
+          "description": "Accept fails with `InviteExpired` and marks the invite `expired` when past expires_at and the flag is on.",
+          "packages": [
+            "@acme/feature-members"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "With the flag on, accepting an expired invite fails with `InviteExpired` and the invite status becomes `expired`",
+            "With the flag off, an expired invite can still be accepted"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "INV-3"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-6",
+          "title": "Make expires_at not null",
+          "type": "migration",
+          "description": "Follow-up migration after the backfill has run on every tenant.",
+          "packages": [
+            "@acme/db-schema"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "The migration fails fast with a clear message if any tenant still has null expires_at",
+            "After it runs, inserting an invite without expires_at is rejected by Postgres"
+          ],
+          "estimate": 2,
+          "dependsOn": [
+            "INV-4"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "INV-E3",
+      "title": "Admin and invitee surfaces",
+      "summary": "Portal management, TTL setting, expired-link page and API field.",
+      "labels": [
+        "invite-expiry"
+      ],
+      "tickets": [
+        {
+          "key": "INV-7",
+          "title": "List, resend and revoke pending invites use-cases",
+          "type": "feature",
+          "description": "Use-cases for the portal: list pending invites with expires_at, resend, revoke.",
+          "packages": [
+            "@acme/feature-members"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "List returns only pending invites, soonest expiry first",
+            "Revoke sets status `revoked` and a revoked link cannot be accepted"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "INV-3"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-8",
+          "title": "Pending invites table in the portal",
+          "type": "feature",
+          "description": "Table under Members with email, invited by, expires in, and resend and revoke actions.",
+          "packages": [
+            "@acme/portal"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "A tenant admin sees each pending invite with a relative expiry (e.g. 'in 3 days')",
+            "Resend updates the expiry in the table without a page reload",
+            "A member without admin role does not see the table"
+          ],
+          "estimate": 5,
+          "dependsOn": [
+            "INV-7"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-12",
+          "title": "Read and update invite TTL use-cases",
+          "type": "feature",
+          "description": "`getInviteTtl` and `updateInviteTtl` in feature-members, validated with `InviteTtlDays`, so the portal never touches tenant_settings directly (rule apps-no-direct-db).",
+          "packages": [
+            "@acme/feature-members"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "`updateInviteTtl(14)` persists invite_ttl_days = 14 for the current tenant",
+            "`updateInviteTtl(45)` fails with `InvalidInviteTtl` and writes nothing",
+            "Only tenant admins can call `updateInviteTtl`; others get `Forbidden`"
+          ],
+          "estimate": 2,
+          "dependsOn": [
+            "INV-1",
+            "INV-2"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-9",
+          "title": "Invite TTL setting in portal settings",
+          "type": "feature",
+          "description": "Setting in tenant settings to change the invite TTL, calling `updateInviteTtl` from feature-members.",
+          "packages": [
+            "@acme/portal"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "Saving 14 persists invite_ttl_days = 14 for the tenant",
+            "Entering 45 shows a validation error and saves nothing"
+          ],
+          "estimate": 3,
+          "dependsOn": [
+            "INV-12"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-10",
+          "title": "Expired invite page",
+          "type": "feature",
+          "description": "Accept route renders a clear expired message with a 'request a new invite' action that notifies the inviter.",
+          "packages": [
+            "@acme/portal"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "Opening an expired link shows the expired page, not a generic error",
+            "Clicking 'request a new invite' sends one notification to the inviter"
+          ],
+          "estimate": 2,
+          "dependsOn": [
+            "INV-5"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        },
+        {
+          "key": "INV-11",
+          "title": "Return expires_at from POST /v1/invites",
+          "type": "feature",
+          "description": "Add `expires_at` to the invite response and the OpenAPI document.",
+          "packages": [
+            "@acme/api"
+          ],
+          "createsPackages": [],
+          "newDependencies": [],
+          "acceptanceCriteria": [
+            "`POST /v1/invites` responds with an ISO 8601 `expires_at`",
+            "The field appears in the generated OpenAPI document"
+          ],
+          "estimate": 1,
+          "dependsOn": [
+            "INV-3"
+          ],
+          "labels": [
+            "invite-expiry"
+          ]
+        }
+      ]
+    }
+  ]
+}

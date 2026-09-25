@@ -1,0 +1,26 @@
+---
+description: Break a ready spec into Linear tickets and sync them. Use when asked to plan, decompose, estimate or create tickets for a spec.
+globs: plans/**/*.json, examples/*/plans/**/*.json
+alwaysApply: false
+---
+
+# Spec to tickets to Linear
+
+Preconditions: `lint_spec` returns `ready: true`. If not, stop and go back to the spec.
+
+1. Call `get_architecture_context`. Read the boundary rules closely; they decide ticket boundaries.
+2. Draft a plan object that matches `packages/core/src/schema.ts`:
+   - epics are shippable slices, tickets are one reviewable PR each (one package, two at most)
+   - scaffolding a new package is its own ticket with `createsPackages` (name, path, layer tag)
+   - every new import edge goes in `newDependencies`
+   - `dependsOn` expresses order; build bottom-up: domain and migrations, then infra, features, apps
+   - estimates on 1, 2, 3, 5, 8; split anything bigger
+   - two to four acceptance criteria each, observable and testable
+   - keys `<PREFIX>-E<n>` for epics and `<PREFIX>-<n>` for tickets; keep keys stable across revisions
+3. Call `validate_plan`. Fix every error, then warnings where reasonable. Repeat until it returns no errors. Do not argue with a boundary finding; route the call through an allowed layer.
+4. Show the engineer the ticket tree from the validation output and ask for changes before saving.
+5. Call `save_plan`.
+6. Call `preview_linear_sync` and show the diff. Only call `apply_linear_sync` after an explicit yes.
+7. After applying, reply with the Linear project URL and the epic URLs from the report.
+
+Re-planning later: edit the saved plan, keep keys, validate, preview, apply. Sync updates changed tickets and reports removed ones; it never deletes.
