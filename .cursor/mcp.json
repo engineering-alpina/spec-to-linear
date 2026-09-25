@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "spec-to-linear": {
+      "command": "npx",
+      "args": ["tsx", "apps/mcp/src/server.ts"],
+      "env": { "STL_ROOT": "examples/acme" }
+    }
+  }
+}
