@@ -2,7 +2,7 @@
   "name": "spec-to-linear",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.18.0",
+  "packageManager": "pnpm@11.5.2",
   "scripts": {
     "stl": "tsx apps/cli/src/main.ts",
     "mcp": "tsx apps/mcp/src/server.ts",
